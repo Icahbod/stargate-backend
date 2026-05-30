@@ -1,4 +1,5 @@
 import { AdminModule } from './admin/admin.module';
+import { BalanceModule } from './balance/balance.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
@@ -64,6 +65,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     PaymentLinksModule,
     WebhooksModule,
     SettlementModule,
+    BalanceModule,
     ApiKeysModule,
     AuditModule,
     SorobanEventsModule,
