@@ -73,7 +73,6 @@ export class WebhooksService {
   }
 
   async rotateSecret(merchantId: string, id: string) {
-    const existing = await this.pool.query('SELECT id FROM webhooks WHERE id=$1 AND merchant_id=$2 AND active=true', [id, merchantId]);
     const existing = await this.pool.query(
       'SELECT id FROM webhooks WHERE id=$1 AND merchant_id=$2 AND active=true',
       [id, merchantId],
@@ -81,13 +80,7 @@ export class WebhooksService {
     if (!existing.rows[0]) throw new NotFoundException('Active webhook not found');
 
     const newSecret = `whsec_${randomBytes(32).toString('hex')}`;
-    const hashed = createHash('sha256').update(newSecret).digest('hex');
     const result = await this.pool.query(
-      `UPDATE webhooks SET previous_hashed_secret=hashed_secret, hashed_secret=$3, secret_rotated_at=NOW() WHERE id=$1 AND merchant_id=$2 RETURNING id`,
-      [id, merchantId, hashed],
-    );
-    if (!result.rows[0]) throw new Error('Webhook not found');
-    return { id: result.rows[0].id, secret: newSecret };
       `UPDATE webhooks
           SET previous_secret=secret, secret=$2, secret_rotated_at=NOW()
         WHERE id=$1 AND merchant_id=$3
@@ -135,17 +128,6 @@ export class WebhooksService {
       `UPDATE webhook_deliveries d
           SET status='pending', next_retry_at=NOW()
          FROM webhooks w
-        WHERE d.webhook_id=w.id AND w.merchant_id=$1 AND d.id=$2
-        RETURNING d.*, w.id as webhook_id`,
-      [merchantId, deliveryId],
-    );
-    if (result.rows[0]) {
-      await this.audit.log(merchantId, 'webhook_retried', 'webhook', result.rows[0].webhook_id, {
-        actorIp,
-        actorEmail,
-        metadata: { deliveryId },
-      });
-    }
         WHERE d.webhook_id=w.id AND w.merchant_id=$1 AND d.id=$2 AND d.status IN ('failed','dead')
         RETURNING d.*, w.id as webhook_id`,
       [merchantId, deliveryId],
@@ -156,6 +138,33 @@ export class WebhooksService {
       actorEmail,
       metadata: { deliveryId },
     });
+    return result.rows[0];
+  }
+
+  async replay(merchantId: string, webhookId: string, deliveryId: string, actorIp?: string, actorEmail?: string) {
+    // Verify webhook belongs to merchant and get the webhook ID for audit logging
+    const webhook = await this.pool.query(
+      'SELECT id FROM webhooks WHERE id=$1 AND merchant_id=$2',
+      [webhookId, merchantId],
+    );
+    if (!webhook.rows[0]) throw new NotFoundException('Webhook not found');
+
+    // Reset the delivery: clear all delivery state and set to pending
+    const result = await this.pool.query(
+      `UPDATE webhook_deliveries
+         SET status='pending', attempts=0, response_status=NULL, delivered_at=NULL, next_retry_at=NOW()
+        WHERE id=$1 AND webhook_id=$2
+        RETURNING *`,
+      [deliveryId, webhookId],
+    );
+    if (result.rows.length === 0) throw new NotFoundException('Delivery not found');
+
+    await this.audit.log(merchantId, 'webhook_replayed', 'webhook', webhookId, {
+      actorIp,
+      actorEmail,
+      metadata: { deliveryId },
+    });
+
     return result.rows[0];
   }
 
@@ -214,9 +223,6 @@ export class WebhooksService {
     return result.rows[0]?.hashed_secret ?? null;
   }
 
-  async verifyWithRotation(webhookId: string, rawBody: string | Buffer, signature: string) {
-    const webhook = await this.pool.query('SELECT hashed_secret, previous_hashed_secret, secret_rotated_at FROM webhooks WHERE id=$1', [webhookId]);
-    if (!webhook.rows[0]) return false;
   async verifyWithRotation(webhookId: string, payload: unknown, signature: string) {
     const webhook = await this.pool.query(
       'SELECT secret, previous_secret, secret_rotated_at FROM webhooks WHERE id=$1',
