@@ -33,6 +33,7 @@ import { StellarModule } from './stellar/stellar.module';
 import { TeamMembersModule } from './team-members/team-members.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { NotificationPreferencesModule } from './notifications/notification-preferences.module';
 import { DevModule } from './dev/dev.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { MetricsMiddleware } from './metrics/metrics.middleware';
@@ -63,6 +64,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     PaymentsModule,
     PaymentLinksModule,
     WebhooksModule,
+    NotificationPreferencesModule,
     SettlementModule,
     ApiKeysModule,
     AuditModule,
