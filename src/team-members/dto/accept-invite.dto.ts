@@ -5,10 +5,10 @@ export class AcceptInviteDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
-  token: string;
+  token!: string;
 
   @ApiProperty({ minLength: 12 })
   @IsString()
   @MinLength(12)
-  password: string;
+  password!: string;
 }

@@ -9,6 +9,12 @@ export class PaymentLinksService {
   constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
 
   async trackEvent(invoiceId: string, eventType: LinkEventType, meta: { ipHash?: string; userAgent?: string }) {
+    /**
+     * Record a payment-link related event for an invoice.
+     * @param invoiceId - invoice id
+     * @param eventType - event type (view/attempt/conversion)
+     * @param meta - optional metadata such as ipHash and userAgent
+     */
     // Verify invoice exists and get merchant_id
     const inv = await this.pool.query('SELECT merchant_id FROM invoices WHERE id=$1', [invoiceId]);
     if (!inv.rows[0]) throw new NotFoundException('Invoice not found');
@@ -21,6 +27,11 @@ export class PaymentLinksService {
   }
 
   async getAnalytics(merchantId: string, invoiceId: string) {
+    /**
+     * Get aggregated analytics for a specific payment link (invoice).
+     * @param merchantId - owning merchant id
+     * @param invoiceId - invoice id to query
+     */
     // Ensure invoice belongs to merchant
     const inv = await this.pool.query('SELECT id FROM invoices WHERE id=$1 AND merchant_id=$2', [invoiceId, merchantId]);
     if (!inv.rows[0]) throw new NotFoundException('Invoice not found');
@@ -46,6 +57,11 @@ export class PaymentLinksService {
   }
 
   async listAnalytics(merchantId: string, query: { page?: string; limit?: string }) {
+    /**
+     * List analytics for payment links belonging to a merchant.
+     * @param merchantId - owning merchant id
+     * @param query - pagination query
+     */
     const page = Math.max(Number(query.page ?? 1), 1);
     const limit = Math.min(Math.max(Number(query.limit ?? 20), 1), 100);
     const offset = (page - 1) * limit;

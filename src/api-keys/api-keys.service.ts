@@ -17,6 +17,11 @@ export class ApiKeysService {
   constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
 
   async create(merchantId: string, input: unknown) {
+    /**
+     * Create a new API key for a merchant and return the raw key.
+     * @param merchantId - owning merchant id
+     * @param input - key creation payload
+     */
     const dto = createApiKeySchema.parse(input);
     const raw = `sk_${randomBytes(32).toString('hex')}`;
     const prefix = raw.slice(0, 10);
@@ -31,6 +36,10 @@ export class ApiKeysService {
   }
 
   async list(merchantId: string) {
+    /**
+     * List active API keys for a merchant.
+     * @param merchantId - owning merchant id
+     */
     const result = await this.pool.query(
       `SELECT id, name, key_prefix, scope, last_used_at, expires_at, revoked_at, created_at
          FROM api_keys WHERE merchant_id=$1 AND revoked_at IS NULL ORDER BY created_at DESC`,
@@ -40,6 +49,11 @@ export class ApiKeysService {
   }
 
   async revoke(merchantId: string, id: string) {
+    /**
+     * Revoke an API key.
+     * @param merchantId - owning merchant id
+     * @param id - api key id to revoke
+     */
     const result = await this.pool.query(
       `UPDATE api_keys SET revoked_at=NOW()
         WHERE id=$1 AND merchant_id=$2 AND revoked_at IS NULL
@@ -50,6 +64,10 @@ export class ApiKeysService {
   }
 
   async validate(rawKey: string): Promise<{ merchantId: string; scope: ApiKeyScope }> {
+    /**
+     * Validate a raw API key and return its merchant and scope.
+     * @param rawKey - raw API key string provided by a client
+     */
     const hash = createHash('sha256').update(rawKey).digest('hex');
     const result = await this.pool.query(
       `UPDATE api_keys

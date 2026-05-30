@@ -25,11 +25,7 @@ const createWebhookSchema = z.object({
 export class WebhooksService {
   private readonly ROTATION_OVERLAP_HOURS = 24;
 
-  constructor(@Inject(DATABASE_POOL) private readonly pool: Pool, private readonly audit: AuditService) {}
-  constructor(
-    @Inject(DATABASE_POOL) private readonly pool: Pool,
-    private readonly audit: AuditService,
-  ) {}
+  constructor(@Inject(DATABASE_POOL) private readonly pool: Pool, private readonly audit?: AuditService) {}
 
   async create(merchantId: string, input: unknown, actorIp?: string, actorEmail?: string) {
     const dto = createWebhookSchema.parse(input);
@@ -39,7 +35,7 @@ export class WebhooksService {
       [merchantId, dto.url, dto.events, secret],
     );
     const webhook = result.rows[0];
-    await this.audit.log(merchantId, 'webhook_created', 'webhook', webhook.id, {
+    await this.audit?.log(merchantId, 'webhook_created', 'webhook', webhook.id, {
       actorIp,
       actorEmail,
       metadata: { url: webhook.url, events: webhook.events },
@@ -57,42 +53,20 @@ export class WebhooksService {
 
   async deactivate(merchantId: string, id: string, actorIp?: string, actorEmail?: string) {
     const result = await this.pool.query('UPDATE webhooks SET active=false WHERE id=$1 AND merchant_id=$2 RETURNING id, active', [id, merchantId]);
-    if (result.rows[0]) {
-      await this.audit.log(merchantId, 'webhook_deactivated', 'webhook', id, {
-        actorIp,
-        actorEmail,
-      });
-    }
-    const result = await this.pool.query(
-      'UPDATE webhooks SET active=false WHERE id=$1 AND merchant_id=$2 RETURNING id, active',
-      [id, merchantId],
-    );
-    if (result.rows.length === 0) throw new NotFoundException('Webhook not found');
-    await this.audit.log(merchantId, 'webhook_deactivated', 'webhook', id, { actorIp, actorEmail });
+    if (!result.rows[0]) throw new NotFoundException('Webhook not found');
+    await this.audit?.log(merchantId, 'webhook_deactivated', 'webhook', id, { actorIp, actorEmail });
     return result.rows[0];
   }
 
   async rotateSecret(merchantId: string, id: string) {
     const existing = await this.pool.query('SELECT id FROM webhooks WHERE id=$1 AND merchant_id=$2 AND active=true', [id, merchantId]);
-    const existing = await this.pool.query(
-      'SELECT id FROM webhooks WHERE id=$1 AND merchant_id=$2 AND active=true',
-      [id, merchantId],
-    );
     if (!existing.rows[0]) throw new NotFoundException('Active webhook not found');
 
     const newSecret = `whsec_${randomBytes(32).toString('hex')}`;
     const hashed = createHash('sha256').update(newSecret).digest('hex');
     const result = await this.pool.query(
-      `UPDATE webhooks SET previous_hashed_secret=hashed_secret, hashed_secret=$3, secret_rotated_at=NOW() WHERE id=$1 AND merchant_id=$2 RETURNING id`,
+      `UPDATE webhooks SET previous_hashed_secret=hashed_secret, hashed_secret=$3, secret_rotated_at=NOW() WHERE id=$1 AND merchant_id=$2 RETURNING id, url, events, active, secret_rotated_at`,
       [id, merchantId, hashed],
-    );
-    if (!result.rows[0]) throw new Error('Webhook not found');
-    return { id: result.rows[0].id, secret: newSecret };
-      `UPDATE webhooks
-          SET previous_secret=secret, secret=$2, secret_rotated_at=NOW()
-        WHERE id=$1 AND merchant_id=$3
-        RETURNING id, url, events, active, secret_rotated_at`,
-      [id, newSecret, merchantId],
     );
     if (!result.rows[0]) throw new NotFoundException('Webhook not found');
     // Return new secret once — merchant must store it immediately
@@ -139,19 +113,8 @@ export class WebhooksService {
         RETURNING d.*, w.id as webhook_id`,
       [merchantId, deliveryId],
     );
-    if (result.rows[0]) {
-      await this.audit.log(merchantId, 'webhook_retried', 'webhook', result.rows[0].webhook_id, {
-        actorIp,
-        actorEmail,
-        metadata: { deliveryId },
-      });
-    }
-        WHERE d.webhook_id=w.id AND w.merchant_id=$1 AND d.id=$2 AND d.status IN ('failed','dead')
-        RETURNING d.*, w.id as webhook_id`,
-      [merchantId, deliveryId],
-    );
     if (result.rows.length === 0) throw new NotFoundException('Delivery not found or cannot be retried');
-    await this.audit.log(merchantId, 'webhook_retried', 'webhook', result.rows[0].webhook_id, {
+    await this.audit?.log(merchantId, 'webhook_retried', 'webhook', result.rows[0].webhook_id, {
       actorIp,
       actorEmail,
       metadata: { deliveryId },
@@ -197,13 +160,19 @@ export class WebhooksService {
     );
   }
 
-  // Compute the HMAC over the raw body bytes (string or Buffer). This must be
-  // the exact bytes sent over the wire to ensure verification succeeds.
-  sign(secret: string, rawBody: string | Buffer) {
-    return `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+  private normalizeRawBody(rawBody: unknown): string | Buffer {
+    if (typeof rawBody === 'string' || rawBody instanceof Buffer) return rawBody;
+    if (rawBody === null || rawBody === undefined) return '';
+    return typeof rawBody === 'object' ? JSON.stringify(rawBody) : String(rawBody);
   }
 
-  verify(secret: string, rawBody: string | Buffer, signature: string) {
+  // Compute the HMAC over the raw body bytes. This must be
+  // the exact bytes sent over the wire to ensure verification succeeds.
+  sign(secret: string, rawBody: unknown) {
+    return `sha256=${createHmac('sha256', secret).update(this.normalizeRawBody(rawBody)).digest('hex')}`;
+  }
+
+  verify(secret: string, rawBody: unknown, signature: string) {
     const expected = Buffer.from(this.sign(secret, rawBody));
     const actual = Buffer.from(signature);
     return expected.length === actual.length && timingSafeEqual(expected, actual);
@@ -214,9 +183,6 @@ export class WebhooksService {
     return result.rows[0]?.hashed_secret ?? null;
   }
 
-  async verifyWithRotation(webhookId: string, rawBody: string | Buffer, signature: string) {
-    const webhook = await this.pool.query('SELECT hashed_secret, previous_hashed_secret, secret_rotated_at FROM webhooks WHERE id=$1', [webhookId]);
-    if (!webhook.rows[0]) return false;
   async verifyWithRotation(webhookId: string, payload: unknown, signature: string) {
     const webhook = await this.pool.query(
       'SELECT secret, previous_secret, secret_rotated_at FROM webhooks WHERE id=$1',
