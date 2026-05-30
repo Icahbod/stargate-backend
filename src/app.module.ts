@@ -1,17 +1,11 @@
-import { AdminModule } from './admin/admin.module';
-import { TreasuryModule } from './treasury/treasury.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AuditModule } from './audit/audit.module';
-import { AdminModule } from './admin/admin.module';
-import { AuditModule } from './audit/audit.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
-import { AuditModule } from './audit/audit.module';
 import { ComplianceModule } from './compliance/compliance.module';
 import { validate } from './config/validate';
 import { DatabaseModule } from './database/database.module';
@@ -20,7 +14,6 @@ import { EstimatesModule } from './estimates/estimates.module';
 import { HealthModule } from './health/health.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
 import { InvoicesModule } from './invoices/invoices.module';
-import { CorrelationMiddleware } from './logger/correlation.middleware';
 import { LoggerModule } from './logger/logger.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { PaymentLinksModule } from './payment-links/payment-links.module';
@@ -33,9 +26,9 @@ import { StellarModule } from './stellar/stellar.module';
 import { TeamMembersModule } from './team-members/team-members.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
-import { DevModule } from './dev/dev.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { MetricsMiddleware } from './metrics/metrics.middleware';
+import { GraphqlGatewayModule } from './graphql/graphql.gateway.module';
 
 @Module({
   imports: [
@@ -65,7 +58,6 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     WebhooksModule,
     SettlementModule,
     ApiKeysModule,
-    AuditModule,
     SorobanEventsModule,
     EstimatesModule,
     SchedulesModule,
@@ -75,6 +67,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     TeamMembersModule,
     DevModule,
     MetricsModule,
+    GraphqlGatewayModule,
   ],
 })
 export class AppModule implements NestModule {
@@ -83,9 +76,5 @@ export class AppModule implements NestModule {
       .apply(MetricsMiddleware)
       .exclude({ path: '/metrics', method: undefined as any })
       .forRoutes('*');
-  }
-}
-
-    consumer.apply(CorrelationMiddleware).forRoutes('*');
   }
 }
