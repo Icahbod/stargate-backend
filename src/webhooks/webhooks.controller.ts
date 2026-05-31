@@ -48,6 +48,13 @@ export class WebhooksController {
     return this.webhooks.deliveryById(req.user.merchantId, id, deliveryId);
   }
 
+  @Post(':id/deliveries/:deliveryId/replay')
+  @ApiOperation({ summary: 'Replay a failed delivery' })
+  replay(@Req() req: any, @Param('id') id: string, @Param('deliveryId') deliveryId: string) {
+    const actorIp = req.ip || req.connection.remoteAddress;
+    return this.webhooks.replay(req.user.merchantId, id, deliveryId, actorIp, req.user.email);
+  }
+
   @Post('deliveries/:id/retry')
   @ApiOperation({ summary: 'Retry a failed or dead delivery' })
   retry(@Req() req: any, @Param('id') id: string) {

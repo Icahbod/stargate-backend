@@ -28,6 +28,10 @@ export class AuthService {
   ) {}
 
   async register(input: unknown) {
+    /**
+     * Register a new merchant and return issued auth tokens.
+     * @param input - registration payload (validated internally)
+     */
     const dto = registerSchema.parse(input);
     const merchant = await this.merchants.create({
       email: dto.email,
@@ -38,6 +42,10 @@ export class AuthService {
   }
 
   async login(input: unknown) {
+    /**
+     * Authenticate a merchant and return issued auth tokens.
+     * @param input - login payload (validated internally)
+     */
     const dto = loginSchema.parse(input);
     const merchant = await this.merchants.findByEmail(dto.email);
     if (!merchant || !(await verifyPassword(dto.password, merchant.password_hash))) {
@@ -47,6 +55,10 @@ export class AuthService {
   }
 
   async refresh(refreshToken?: string) {
+    /**
+     * Refresh access tokens using a valid refresh token.
+     * @param refreshToken - opaque refresh token string
+     */
     if (!refreshToken) throw new UnauthorizedException('Missing refresh token');
     const parsed = this.parseRefresh(refreshToken);
     const key = `refresh:${parsed.merchantId}:${parsed.tokenId}`;
@@ -58,6 +70,10 @@ export class AuthService {
   }
 
   async logout(refreshToken?: string) {
+    /**
+     * Invalidate a refresh token (logout).
+     * @param refreshToken - opaque refresh token string
+     */
     if (!refreshToken) return;
     const parsed = this.parseRefresh(refreshToken);
     await this.redis.del(`refresh:${parsed.merchantId}:${parsed.tokenId}`);
@@ -95,6 +111,10 @@ export class AuthService {
   }
 
   async signTeamMemberAccess(member: { id: string; email: string; role: string; merchantId: string; tier: string }) {
+    /**
+     * Issue an access token for a team member.
+     * @param member - team member identifying fields
+     */
     return this.jwt.signAsync({
       sub: member.id,
       email: member.email,
