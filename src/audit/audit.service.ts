@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Pool } from 'pg';
+import { DATABASE_POOL } from '../database/database.module';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,9 +32,20 @@ const REQUIRED_VALUES: Partial<Record<(typeof REQUIRED_ENV)[number], string>> = 
   RUN_MIGRATIONS_ON_STARTUP: 'false',
 };
 
+export type AuditAction =
+  | 'api_key_created'
+  | 'api_key_rotated'
+  | 'api_key_deactivated'
+  | 'webhook_created'
+  | 'webhook_rotated'
+  | 'webhook_deactivated'
+  | 'webhook_retried';
+
+export type ResourceType = 'api_key' | 'webhook';
+
 @Injectable()
 export class AuditService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService, @Inject(DATABASE_POOL) private readonly pool?: Pool) {}
 
   async run(): Promise<{ status: 'pass' | 'fail'; checks: CheckResult[] }> {
     const checks: CheckResult[] = [
@@ -89,24 +102,7 @@ export class AuditService {
     } catch (err: any) {
       return { name, status: 'fail', detail: err.message };
     }
-import { Inject, Injectable } from '@nestjs/common';
-import { Pool } from 'pg';
-import { DATABASE_POOL } from '../database/database.module';
-
-export type AuditAction = 
-  | 'api_key_created' 
-  | 'api_key_rotated' 
-  | 'api_key_deactivated' 
-  | 'webhook_created' 
-  | 'webhook_rotated' 
-  | 'webhook_deactivated' 
-  | 'webhook_retried';
-
-export type ResourceType = 'api_key' | 'webhook';
-
-@Injectable()
-export class AuditService {
-  constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
+  }
 
   async log(
     merchantId: string,
@@ -119,6 +115,7 @@ export class AuditService {
       metadata?: Record<string, any>;
     },
   ) {
+    if (!this.pool) throw new Error('Database pool is not configured');
     await this.pool.query(
       `INSERT INTO audit_logs (merchant_id, action, resource_type, resource_id, actor_ip, actor_email, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -135,6 +132,7 @@ export class AuditService {
   }
 
   async list(merchantId: string, limit: number = 100, offset: number = 0) {
+    if (!this.pool) throw new Error('Database pool is not configured');
     const result = await this.pool.query(
       `SELECT * FROM audit_logs 
        WHERE merchant_id = $1 

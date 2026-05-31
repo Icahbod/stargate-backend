@@ -56,7 +56,7 @@ export class InvoicesService {
     private readonly config: ConfigService,
     private readonly webhooks: WebhooksService,
     private readonly idempotency: IdempotencyService,
-    private readonly fx: FxRateService,
+    private readonly fx?: FxRateService,
   ) {}
 
   async create(merchantId: string, input: unknown, idempotencyKey?: string) {
@@ -83,7 +83,7 @@ export class InvoicesService {
     }
 
     // Convert amount to USDC for fee/limit calculations
-    const usdcEquivStr = await this.fx.toUsdc(dto.amount!, currency);
+    const usdcEquivStr = await this.fx!.toUsdc(dto.amount!, currency);
     const usdcEquiv = toUnits(usdcEquivStr);
 
     await this.enforceSpendLimits(merchantId, merchant, usdcEquiv);
@@ -102,8 +102,8 @@ export class InvoicesService {
     // Fee is always in USDC; gross in native currency = amount + fee converted back
     const feeInCurrency = currency === 'USDC'
       ? fee
-      : toUnits(await this.fx.toUsdc(fromUnits(fee), 'USDC').then(async (usdcFee) => {
-          const rate = await this.fx.getRate(currency);
+      : toUnits(await this.fx!.toUsdc(fromUnits(fee), 'USDC').then(async (usdcFee) => {
+          const rate = await this.fx!.getRate(currency);
           return (parseFloat(usdcFee) / rate).toFixed(7);
         }));
     const gross = amount + feeInCurrency;
@@ -328,15 +328,22 @@ export class InvoicesService {
 
   @Cron('0 */5 * * * *')
   async expireInvoices() {
+    // Expire invoices whose expires_at timestamp has passed
+    const result = await this.pool.query(
+      `UPDATE invoices SET status='expired'
+       WHERE status IN ('pending','partial') AND expires_at < NOW()
+       RETURNING id, merchant_id`,
     const result = await this.pool.query(
       `UPDATE invoices SET status='expired'
         WHERE status IN ('pending','partial') AND expires_at < NOW()
         RETURNING id, merchant_id`,
     );
+
     for (const row of result.rows) {
       await this.webhooks.dispatchEvent(row.merchant_id, 'merchant.payment_intent.expired', {
         invoice_id: row.id,
         expired_at: new Date().toISOString(),
+        reason: 'expires_at',
       });
     }
   }
