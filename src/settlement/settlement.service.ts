@@ -10,13 +10,6 @@ export class SettlementService {
   async createDailySettlements() {
     // Only settle merchants without a deferred schedule, or whose deferred time has passed
     const merchants = await this.pool.query(
-      `SELECT merchant_id, SUM(net_usdc) AS amount
-         FROM ledger_entries le
-         JOIN merchants m ON m.id = le.merchant_id
-        WHERE le.settlement_id IS NULL
-          AND (m.settlement_scheduled_at IS NULL OR m.settlement_scheduled_at <= NOW())
-        GROUP BY le.merchant_id
-       HAVING SUM(net_usdc) >= 1.00`,
       `SELECT merchant_id, SUM(net_usdc)::NUMERIC(18,7) AS amount
          FROM ledger_entries
         WHERE settlement_id IS NULL
@@ -40,6 +33,7 @@ export class SettlementService {
       await this.pool.query(
         `UPDATE merchants SET settlement_scheduled_at=NULL WHERE id=$1 AND settlement_scheduled_at IS NOT NULL`,
         [merchant.merchant_id],
+      );
       await this.pool.query(
         `UPDATE ledger_entries SET settlement_id=$1 WHERE merchant_id=$2 AND settlement_id IS NULL`,
         [settlement.rows[0].id, merchant.merchant_id],

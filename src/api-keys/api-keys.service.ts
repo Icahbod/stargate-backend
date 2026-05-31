@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { z } from 'zod';
@@ -10,29 +10,64 @@ const createApiKeySchema = z.object({
   name: z.string().min(1).max(100),
   scope: z.enum(['read_only', 'webhooks', 'full_access']),
   expires_at: z.string().datetime().optional(),
+  allowed_ips: z.array(z.string().min(1)).optional(),
 });
+
+// Returns true if the given IP falls within the CIDR range (IPv4 only).
+// For entries without a prefix length, performs an exact string match (works for both IPv4 and IPv6).
+function ipMatchesCidr(ip: string, cidr: string): boolean {
+  if (!cidr.includes('/')) return ip === cidr;
+
+  const [range, bitsStr] = cidr.split('/');
+  const prefixLen = parseInt(bitsStr, 10);
+  const ipParts = ip.split('.').map(Number);
+  const rangeParts = range.split('.').map(Number);
+
+  if (ipParts.length !== 4 || rangeParts.length !== 4) return false;
+
+  const ipNum = ipParts.reduce((acc, p) => ((acc << 8) | p) >>> 0, 0) >>> 0;
+  const rangeNum = rangeParts.reduce((acc, p) => ((acc << 8) | p) >>> 0, 0) >>> 0;
+  const mask = prefixLen === 0 ? 0 : (~0 << (32 - prefixLen)) >>> 0;
+
+  return (ipNum & mask) === (rangeNum & mask);
+}
+
+function isIpAllowed(clientIp: string | undefined, allowedIps: string[] | null): boolean {
+  if (!allowedIps || allowedIps.length === 0) return true;
+  if (!clientIp) return false;
+  return allowedIps.some((cidr) => ipMatchesCidr(clientIp, cidr));
+}
 
 @Injectable()
 export class ApiKeysService {
   constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
 
   async create(merchantId: string, input: unknown) {
+    /**
+     * Create a new API key for a merchant and return the raw key.
+     * @param merchantId - owning merchant id
+     * @param input - key creation payload
+     */
     const dto = createApiKeySchema.parse(input);
     const raw = `sk_${randomBytes(32).toString('hex')}`;
     const prefix = raw.slice(0, 10);
     const hash = createHash('sha256').update(raw).digest('hex');
     const result = await this.pool.query(
-      `INSERT INTO api_keys (merchant_id, name, key_hash, key_prefix, scope, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING id, name, key_prefix, scope, expires_at, created_at`,
-      [merchantId, dto.name, hash, prefix, dto.scope, dto.expires_at ?? null],
+      `INSERT INTO api_keys (merchant_id, name, key_hash, key_prefix, scope, expires_at, allowed_ips)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id, name, key_prefix, scope, expires_at, allowed_ips, created_at`,
+      [merchantId, dto.name, hash, prefix, dto.scope, dto.expires_at ?? null, dto.allowed_ips ?? null],
     );
     return { ...result.rows[0], key: raw };
   }
 
   async list(merchantId: string) {
+    /**
+     * List active API keys for a merchant.
+     * @param merchantId - owning merchant id
+     */
     const result = await this.pool.query(
-      `SELECT id, name, key_prefix, scope, last_used_at, expires_at, revoked_at, created_at
+      `SELECT id, name, key_prefix, scope, last_used_at, expires_at, revoked_at, allowed_ips, created_at
          FROM api_keys WHERE merchant_id=$1 AND revoked_at IS NULL ORDER BY created_at DESC`,
       [merchantId],
     );
@@ -40,6 +75,11 @@ export class ApiKeysService {
   }
 
   async revoke(merchantId: string, id: string) {
+    /**
+     * Revoke an API key.
+     * @param merchantId - owning merchant id
+     * @param id - api key id to revoke
+     */
     const result = await this.pool.query(
       `UPDATE api_keys SET revoked_at=NOW()
         WHERE id=$1 AND merchant_id=$2 AND revoked_at IS NULL
@@ -50,6 +90,11 @@ export class ApiKeysService {
   }
 
   async validate(rawKey: string): Promise<{ merchantId: string; scope: ApiKeyScope }> {
+    /**
+     * Validate a raw API key and return its merchant and scope.
+     * @param rawKey - raw API key string provided by a client
+     */
+  async validate(rawKey: string, clientIp?: string): Promise<{ merchantId: string; scope: ApiKeyScope }> {
     const hash = createHash('sha256').update(rawKey).digest('hex');
     const result = await this.pool.query(
       `UPDATE api_keys
@@ -57,10 +102,16 @@ export class ApiKeysService {
         WHERE key_hash=$1
           AND revoked_at IS NULL
           AND (expires_at IS NULL OR expires_at > NOW())
-        RETURNING merchant_id, scope`,
+        RETURNING merchant_id, scope, allowed_ips`,
       [hash],
     );
     if (!result.rows[0]) throw new UnauthorizedException('Invalid or expired API key');
-    return { merchantId: result.rows[0].merchant_id, scope: result.rows[0].scope };
+
+    const { merchant_id, scope, allowed_ips } = result.rows[0];
+    if (!isIpAllowed(clientIp, allowed_ips)) {
+      throw new ForbiddenException('Client IP address is not permitted for this API key');
+    }
+
+    return { merchantId: merchant_id, scope };
   }
 }
