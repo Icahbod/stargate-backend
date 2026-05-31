@@ -61,6 +61,84 @@
         ]
       }
     },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "summary": "Service health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service degraded or unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        },
+        "tags": ["health"]
+      }
+    },
+    "/health/deep": {
+      "get": {
+        "operationId": "HealthController_getDeepHealth",
+        "summary": "Deep service health (includes RPC + queues)",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service degraded or unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        },
+        "tags": ["health"]
+      }
+    },
+    "/health/rpc": {
+      "get": {
+        "operationId": "HealthController_getRpcHealth",
+        "summary": "RPC / external services health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RpcHealthResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service degraded or unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RpcHealthResponse" }
+              }
+            }
+          }
+        },
+        "tags": ["health"]
+      }
+    },
     "/merchants/me": {
       "get": {
         "operationId": "MerchantsController_me",
@@ -488,6 +566,41 @@
         "type": "http"
       }
     },
-    "schemas": {}
+    "schemas": {
+      "CheckResult": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["up", "down", "not_configured"] },
+          "latencyMs": { "type": "integer", "format": "int64" },
+          "detail": { "type": "string" }
+        },
+        "required": ["status", "latencyMs"]
+      },
+      "Checks": {
+        "type": "object",
+        "additionalProperties": { "$ref": "#/components/schemas/CheckResult" }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "degraded"] },
+          "version": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "checks": { "$ref": "#/components/schemas/Checks" }
+        },
+        "required": ["status", "version", "timestamp", "checks"]
+      },
+      "RpcHealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "degraded"] },
+          "version": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "network": { "type": "string" },
+          "checks": { "$ref": "#/components/schemas/Checks" }
+        },
+        "required": ["status", "version", "timestamp", "checks", "network"]
+      }
+    }
   }
 }
