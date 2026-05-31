@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import PDFDocument from 'pdfkit';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { DATABASE_POOL } from '../database/database.module';
 import { FxRateService, SupportedCurrency } from '../fx/fx-rate.service';
@@ -59,14 +59,15 @@ export class InvoicesService {
     private readonly fx?: FxRateService,
   ) {}
 
-  async create(merchantId: string, input: unknown, idempotencyKey?: string) {
+  async create(merchantId: string, input: unknown, idempotencyKey?: string, client?: PoolClient) {
+    const db = client ?? this.pool;
     const bodyHash = this.idempotency.hashBody(input);
 
     if (idempotencyKey) {
       const cached = await this.idempotency.check(merchantId, idempotencyKey, bodyHash);
       if (cached) return cached;
 
-      const existing = await this.pool.query(
+      const existing = await db.query(
         `SELECT *, $3::text || '/pay/' || id AS payment_url FROM invoices WHERE merchant_id=$1 AND idempotency_key=$2`,
         [merchantId, idempotencyKey, this.config.get<string>('PUBLIC_PAY_URL', 'https://pay.stargate.finance')],
       );
@@ -124,7 +125,7 @@ export class InvoicesService {
     // gross_usdc_equiv stores the USDC value for reconciliation
     const grossUsdcEquiv = currency === 'USDC' ? fromUnits(gross) : usdcEquivStr;
 
-    const result = await this.pool.query(
+    const result = await db.query(
       `INSERT INTO invoices
          (merchant_id, amount_usdc, gross_usdc, fee_usdc, net_usdc, description,
           muxed_id, muxed_address, expires_at, amount_remaining_usdc, partial_payments_enabled,
@@ -166,7 +167,7 @@ export class InvoicesService {
       await client.query('BEGIN');
       const results: any[] = [];
       for (const input of inputs) {
-        results.push(await this.create(merchantId, input));
+        results.push(await this.create(merchantId, input, undefined, client));
       }
       await client.query('COMMIT');
       return results;
