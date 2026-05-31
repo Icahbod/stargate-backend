@@ -12,6 +12,12 @@ npm run db:migrate
 npm run start:dev
 ```
 
+## GraphQL Gateway
+
+The backend exposes an opt-in GraphQL gateway at `POST /graphql` when the environment variable `GRAPHQL_GATEWAY_ENABLED` is set to `true`.
+
+The gateway wraps existing authenticated REST operations and currently supports invoice and merchant queries plus invoice creation and refunds.
+
 ## Verification
 
 ```sh

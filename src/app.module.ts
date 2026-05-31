@@ -17,7 +17,6 @@ import { EstimatesModule } from './estimates/estimates.module';
 import { HealthModule } from './health/health.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
 import { InvoicesModule } from './invoices/invoices.module';
-import { CorrelationMiddleware } from './logger/correlation.middleware';
 import { LoggerModule } from './logger/logger.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { PaymentLinksModule } from './payment-links/payment-links.module';
@@ -35,6 +34,7 @@ import { DevModule } from './dev/dev.module';
 import { AdminModule } from './admin/admin.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { MetricsMiddleware } from './metrics/metrics.middleware';
+import { GraphqlGatewayModule } from './graphql/graphql.gateway.module';
 
 @Module({
   imports: [
@@ -66,7 +66,6 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     SettlementModule,
     BalanceModule,
     ApiKeysModule,
-    AuditModule,
     SorobanEventsModule,
     EstimatesModule,
     SchedulesModule,
@@ -76,6 +75,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     TeamMembersModule,
     DevModule,
     MetricsModule,
+    GraphqlGatewayModule,
   ],
 })
 export class AppModule implements NestModule {

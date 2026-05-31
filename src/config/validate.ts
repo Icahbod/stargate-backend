@@ -10,6 +10,7 @@ const envSchema = z.object({
   HORIZON_URL: z.string().url(),
   STELLAR_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
   WEBHOOK_SIGNING_SECRET: z.string().min(16).default('local-webhook-signing-secret'),
+  GRAPHQL_GATEWAY_ENABLED: z.coerce.boolean().default(false),
   PORT: z.coerce.number().default(3001),
 });
 
