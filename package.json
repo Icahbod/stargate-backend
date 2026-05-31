@@ -54,6 +54,8 @@
     "graphql": "^16.8.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
     "@nestjs/cli": "^10.4.5",
     "@nestjs/testing": "^10.4.0",
     "@types/cookie-parser": "^1.4.7",
