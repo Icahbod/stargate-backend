@@ -169,3 +169,4 @@ Run **one reconciler instance per environment**. Multiple instances would proces
 - [`RECONCILER_INTEGRATION.md`](./RECONCILER_INTEGRATION.md) — Full data flow and integration details
 - [`RECOVERY.md`](./RECOVERY.md) — Cursor reset after DB restore, secrets rotation
 - [`LAUNCH_RUNBOOK.md`](./LAUNCH_RUNBOOK.md) — Production deployment checklist
+ - [`RECONCILER_CONTRIBUTING.md`](./RECONCILER_CONTRIBUTING.md) — How to run tests and add reconciliation rules
