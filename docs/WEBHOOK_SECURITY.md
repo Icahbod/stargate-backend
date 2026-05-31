@@ -132,10 +132,12 @@ async function handleWebhook(req: Request, secret: string): Promise<void> {
 
 | Event                  | Fired when                                    |
 | ---------------------- | --------------------------------------------- |
-| `invoice.paid`         | On-chain payment confirmed by reconciler      |
-| `invoice.expired`      | Pending invoice passes `expires_at`           |
-| `invoice.cancelled`    | Merchant cancels via API                      |
-| `settlement.completed` | Settlement batch disbursed to merchant wallet |
+| `invoice.paid`           | On-chain payment confirmed by reconciler      |
+| `invoice.expired`        | Pending invoice passes `expires_at`           |
+| `invoice.cancelled`      | Merchant cancels via API                      |
+| `settlement.completed`   | Settlement batch disbursed to merchant wallet |
+| `merchant.kyc.approved`  | KYC review approved                           |
+| `merchant.kyc.rejected`  | KYC review rejected                           |
 
 ---
 

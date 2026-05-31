@@ -9,7 +9,8 @@ import { AppLogger } from '../../logger/logger.service';
 import { correlationStorage } from '../../logger/correlation.context';
 import { CORRELATION_ID_HEADER } from '../../logger/correlation.middleware';
 
-const backoffMinutes = [0, 1, 5, 30, 120];
+// Base backoff delays in minutes: attempt 1→1m, 2→5m, 3→30m, 4→120m
+const BACKOFF_MINUTES = [0, 1, 5, 30, 120];
 
 @Injectable()
 export class WebhookDeliveryWorker {
@@ -23,7 +24,7 @@ export class WebhookDeliveryWorker {
   @Cron('*/30 * * * * *')
   async deliverPending() {
     const result = await this.pool.query(
-      `SELECT d.*, w.url, w.secret, w.previous_secret, w.secret_rotated_at
+      `SELECT d.*, w.url, w.hashed_secret, w.previous_hashed_secret, w.secret_rotated_at
          FROM webhook_deliveries d
          JOIN webhooks w ON w.id=d.webhook_id
         WHERE w.active=true
@@ -41,6 +42,11 @@ export class WebhookDeliveryWorker {
 
   private async deliver(delivery: any, correlationId: string) {
     const attempts = Number(delivery.attempts) + 1;
+    const signatures = [this.webhooks.sign(delivery.hashed_secret, delivery.payload)];
+    if (delivery.previous_hashed_secret && delivery.secret_rotated_at) {
+      const graceMs = 24 * 60 * 60 * 1000;
+      if (Date.now() - new Date(delivery.secret_rotated_at).getTime() < graceMs) {
+        signatures.push(this.webhooks.sign(delivery.previous_hashed_secret, delivery.payload));
     // Compute the raw body exactly as sent and compute HMACs over those bytes.
     const rawBody = JSON.stringify(delivery.payload);
     const signatures = [this.webhooks.sign(delivery.secret, rawBody)];
@@ -70,6 +76,8 @@ export class WebhookDeliveryWorker {
         body: rawBody,
         signal: AbortSignal.timeout(this.config.get<number>('WEBHOOK_TIMEOUT_MS', 5000)),
       });
+      const succeeded = response.ok;
+      const dead = !succeeded && attempts >= 5;
 
       this.logger.log(
         { event: 'webhook.deliver.response', deliveryId: delivery.id, status: response.status, ok: response.ok },
@@ -78,14 +86,10 @@ export class WebhookDeliveryWorker {
 
       await this.pool.query(
         `UPDATE webhook_deliveries SET status=$2, attempts=$3, response_status=$4, delivered_at=CASE WHEN $2='delivered' THEN NOW() ELSE NULL END, next_retry_at=$5 WHERE id=$1`,
-        [
-          delivery.id,
-          response.ok ? 'delivered' : attempts >= 5 ? 'dead' : 'pending',
-          attempts,
-          response.status,
-          response.ok || attempts >= 5 ? null : this.nextRetry(attempts),
-        ],
+        [delivery.id, succeeded ? 'delivered' : dead ? 'dead' : 'pending', attempts, response.status, succeeded || dead ? null : this.nextRetry(attempts)],
       );
+    } catch {
+      const dead = attempts >= 5;
     } catch (err) {
       this.logger.error(
         { event: 'webhook.deliver.error', deliveryId: delivery.id, url: delivery.url, attempt: attempts },
@@ -94,13 +98,17 @@ export class WebhookDeliveryWorker {
       );
       await this.pool.query(
         `UPDATE webhook_deliveries SET status=$2, attempts=$3, next_retry_at=$4 WHERE id=$1`,
-        [delivery.id, attempts >= 5 ? 'dead' : 'pending', attempts, attempts >= 5 ? null : this.nextRetry(attempts)],
+        [delivery.id, dead ? 'dead' : 'pending', attempts, dead ? null : this.nextRetry(attempts)],
       );
     }
   }
 
-  private nextRetry(attempts: number) {
-    const minutes = backoffMinutes[Math.min(attempts, backoffMinutes.length - 1)];
-    return new Date(Date.now() + minutes * 60_000);
+  /** Exponential backoff with configurable jitter.
+   *  WEBHOOK_JITTER_MAX_MS (default 30 000) controls the max random offset added. */
+  nextRetry(attempts: number): Date {
+    const baseMs = BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length - 1)] * 60_000;
+    const jitterMax = this.config.get<number>('WEBHOOK_JITTER_MAX_MS', 30_000);
+    const jitter = Math.floor(Math.random() * jitterMax);
+    return new Date(Date.now() + baseMs + jitter);
   }
 }

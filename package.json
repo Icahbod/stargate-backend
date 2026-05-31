@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "NestJS API, PostgreSQL database, Redis streams, and Rust reconciler for Stargate Protocol.",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "build": "nest build",
     "start": "nest start",
@@ -11,8 +15,12 @@
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "ts-node -r tsconfig-paths/register src/database/run-migrations.ts",
+    "db:seed": "ts-node -r tsconfig-paths/register scripts/seed.ts",
+    "lint": "eslint \"{src,test,scripts}/**/*.ts\" --max-warnings 0",
+    "format:check": "prettier --check \"{src,test,scripts}/**/*.ts\"",
     "generate:openapi": "ts-node -r tsconfig-paths/register scripts/generate-openapi.ts",
-    "publish:types": "npm --prefix packages/types run build && npm publish --workspace packages/types --access public"
+    "publish:types": "npm --prefix packages/types run build && npm publish --workspace packages/types --access public",
+    "prepare": "husky"
   },
   "workspaces": [
     "packages/types"
@@ -54,11 +62,19 @@
     "@types/node": "^22.0.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.11.6",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "lint-staged": "^15.2.10",
     "prettier": "^3.3.3",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.5.4"
+  },
+  "lint-staged": {
+    "{src,test,scripts}/**/*.ts": [
+      "prettier --write",
+      "eslint --max-warnings 0"
+    ]
   }
 }

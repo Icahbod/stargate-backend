@@ -1,3 +1,6 @@
+import { AdminModule } from './admin/admin.module';
+import { BalanceModule } from './balance/balance.module';
+import { TreasuryModule } from './treasury/treasury.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -26,6 +29,9 @@ import { StellarModule } from './stellar/stellar.module';
 import { TeamMembersModule } from './team-members/team-members.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { NotificationPreferencesModule } from './notifications/notification-preferences.module';
+import { DevModule } from './dev/dev.module';
+import { AdminModule } from './admin/admin.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { MetricsMiddleware } from './metrics/metrics.middleware';
 import { GraphqlGatewayModule } from './graphql/graphql.gateway.module';
@@ -56,7 +62,9 @@ import { GraphqlGatewayModule } from './graphql/graphql.gateway.module';
     PaymentsModule,
     PaymentLinksModule,
     WebhooksModule,
+    NotificationPreferencesModule,
     SettlementModule,
+    BalanceModule,
     ApiKeysModule,
     SorobanEventsModule,
     EstimatesModule,
@@ -76,5 +84,8 @@ export class AppModule implements NestModule {
       .apply(MetricsMiddleware)
       .exclude({ path: '/metrics', method: undefined as any })
       .forRoutes('*');
+
+
+    consumer.apply(CorrelationMiddleware).forRoutes('*');
   }
 }
