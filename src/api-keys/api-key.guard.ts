@@ -25,7 +25,14 @@ export class ApiKeyGuard implements CanActivate {
     if (!header?.startsWith('Bearer ')) throw new UnauthorizedException('Missing API key');
     const raw = header.slice(7);
     if (!raw.startsWith('sk_')) throw new UnauthorizedException('Not an API key');
-    const { merchantId, scope } = await this.apiKeys.validate(raw);
+
+    // Prefer the left-most address in X-Forwarded-For when running behind a proxy,
+    // falling back to the Express-resolved req.ip and then the raw socket address.
+    const forwarded = req.headers['x-forwarded-for'] as string | undefined;
+    const clientIp: string | undefined =
+      forwarded?.split(',')[0]?.trim() ?? req.ip ?? req.socket?.remoteAddress;
+
+    const { merchantId, scope } = await this.apiKeys.validate(raw, clientIp);
     req.user = { merchantId, scope, isApiKey: true };
 
     const required: ApiKeyScope | undefined = this.reflector.get(REQUIRED_SCOPE_KEY, context.getHandler());

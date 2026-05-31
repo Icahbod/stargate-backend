@@ -422,7 +422,63 @@
     "version": "1.0",
     "contact": {}
   },
-  "tags": [],
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Merchant registration, login, token refresh, and logout",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "merchants",
+      "description": "Merchant profile management",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "compliance",
+      "description": "OFAC screening and KYC document upload",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "invoices",
+      "description": "Invoice lifecycle: create, list, retrieve, and cancel",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "payments",
+      "description": "Stellar payment transaction preparation and real-time status streaming",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "webhooks",
+      "description": "Webhook endpoint registration, delivery history, and retry",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "health",
+      "description": "Service health and dependency checks",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "api-keys",
+      "description": "Programmatic API key management",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "estimates",
+      "description": "FX rate and fee estimation",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    },
+    {
+      "name": "settlement",
+      "description": "Settlement stream and payout management",
+      "x-readme": { "code-samples": [{ "language": "curl", "name": "cURL" }] }
+    }
+  ],
+  "x-readme": {
+    "samples-languages": ["curl", "node", "python", "ruby"],
+    "explorer-enabled": true,
+    "proxy-enabled": false
+  },
   "servers": [],
   "components": {
     "securitySchemes": {
