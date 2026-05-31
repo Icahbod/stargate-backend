@@ -56,7 +56,7 @@ export class InvoicesService {
     private readonly config: ConfigService,
     private readonly webhooks: WebhooksService,
     private readonly idempotency: IdempotencyService,
-    private readonly fx: FxRateService,
+    private readonly fx?: FxRateService,
   ) {}
 
   async create(merchantId: string, input: unknown, idempotencyKey?: string) {
@@ -83,7 +83,7 @@ export class InvoicesService {
     }
 
     // Convert amount to USDC for fee/limit calculations
-    const usdcEquivStr = await this.fx.toUsdc(dto.amount!, currency);
+    const usdcEquivStr = await this.fx!.toUsdc(dto.amount!, currency);
     const usdcEquiv = toUnits(usdcEquivStr);
 
     await this.enforceSpendLimits(merchantId, merchant, usdcEquiv);
@@ -102,14 +102,20 @@ export class InvoicesService {
     // Fee is always in USDC; gross in native currency = amount + fee converted back
     const feeInCurrency = currency === 'USDC'
       ? fee
-      : toUnits(await this.fx.toUsdc(fromUnits(fee), 'USDC').then(async (usdcFee) => {
-          const rate = await this.fx.getRate(currency);
+      : toUnits(await this.fx!.toUsdc(fromUnits(fee), 'USDC').then(async (usdcFee) => {
+          const rate = await this.fx!.getRate(currency);
           return (parseFloat(usdcFee) / rate).toFixed(7);
         }));
     const gross = amount + feeInCurrency;
     const net = amount - this.fixedFeeUnits(merchant);
 
+    // #132: Reject invoice when fixed fee exceeds invoice amount (net would be negative)
+    if (net < 0n) {
+      throw new BadRequestException('Invoice amount is less than the fixed fee; net payout would be negative');
+    }
+
     const muxedBaseId = await this.ensureMuxedBase(merchantId);
+    // #131: Use atomic DB increment to avoid race condition in muxed ID allocation
     const next = await this.nextInvoiceSequence(merchantId);
     const muxedId = muxedBaseId + next;
     const muxedAddress = this.stellar.buildMuxedAddress(muxedId);
@@ -130,7 +136,7 @@ export class InvoicesService {
         fromUnits(amount),
         fromUnits(gross),
         fromUnits(fee),
-        fromUnits(net > 0n ? net : 0n),
+        fromUnits(net),
         dto.description ?? null,
         muxedId.toString(),
         muxedAddress,
@@ -224,7 +230,14 @@ export class InvoicesService {
       [id],
     );
     if (!result.rows[0]) throw new NotFoundException('Invoice not found');
-    return result.rows[0];
+
+    // #133: Block payment on expired or cancelled invoices
+    const invoice = result.rows[0];
+    if (invoice.status === 'expired') throw new BadRequestException('Invoice has expired');
+    if (invoice.status === 'cancelled') throw new BadRequestException('Invoice has been cancelled');
+    if (invoice.status === 'paid') throw new BadRequestException('Invoice has already been paid');
+
+    return invoice;
   }
 
   async refund(merchantId: string, id: string) {
@@ -315,35 +328,28 @@ export class InvoicesService {
 
   @Cron('0 */5 * * * *')
   async expireInvoices() {
-    // Keep existing expiry behavior based on invoice.expires_at
+    // Expire invoices whose expires_at timestamp has passed
+    const result = await this.pool.query(
+      `UPDATE invoices SET status='expired'
+       WHERE status IN ('pending','partial') AND expires_at < NOW()
+       RETURNING id, merchant_id`,
     const result = await this.pool.query(
       `UPDATE invoices SET status='expired'
         WHERE status IN ('pending','partial') AND expires_at < NOW()
         RETURNING id, merchant_id`,
-       WHERE status='pending' AND expires_at < NOW()
-       RETURNING id, merchant_id`,
     );
+
     for (const row of result.rows) {
       await this.webhooks.dispatchEvent(row.merchant_id, 'merchant.payment_intent.expired', {
         invoice_id: row.id,
         expired_at: new Date().toISOString(),
-      });
-    }
         reason: 'expires_at',
       });
     }
-
-    await this.pool.query(
-      `UPDATE invoices
-         SET status='expired'
-       WHERE status IN ('pending','partial') AND expires_at < NOW()`,
-    );
   }
 
   @Cron('30 */5 * * * *')
   async autoCancelUnpaidInvoices() {
-    // Merchant-configured TTL (unpaid_invoice_ttl_minutes) for unpaid invoices.
-    // If the TTL elapses, cancel invoices that are still not paid.
     const result = await this.pool.query(
       `UPDATE invoices i
          SET status='cancelled'
@@ -356,33 +362,17 @@ export class InvoicesService {
     );
 
     for (const row of result.rows) {
-      // Reuse existing event model currently used for expiry notifications.
-      // Webhook consumers can treat this as a payment-intent expiry.
       await this.webhooks.dispatchEvent(row.merchant_id, 'merchant.payment_intent.expired', {
         invoice_id: row.id,
         expired_at: new Date().toISOString(),
         reason: 'unpaid_invoice_ttl',
       });
-
-      // Also emit the explicit cancellation event when supported.
       await this.webhooks.dispatchEvent(row.merchant_id, 'invoice.cancelled', {
         invoice_id: row.id,
         cancelled_at: new Date().toISOString(),
         reason: 'unpaid_invoice_ttl',
       });
     }
-      await this.webhooks.dispatchEvent(
-        row.merchant_id,
-        'merchant.payment_intent.expired',
-        { invoice_id: row.id, expired_at: new Date().toISOString() },
-      );
-    }
-
-    // Mark all expired pending/partial invoices as expired
-    await this.pool.query(
-    for (const row of result.rows) {
-      await this.webhooks.dispatchEvent(row.merchant_id, 'merchant.payment_intent.expired', { invoice_id: row.id, expired_at: new Date().toISOString() });
-    await this.pool.query(`UPDATE invoices SET status='expired' WHERE status IN ('pending','partial') AND expires_at < NOW()`);
   }
 
   private async enforceSpendLimits(merchantId: string, merchant: any, usdcAmount: bigint) {
@@ -429,8 +419,12 @@ export class InvoicesService {
     return base;
   }
 
-  private async nextInvoiceSequence(merchantId: string) {
-    const result = await this.pool.query('SELECT COUNT(*)::bigint + 1 AS next FROM invoices WHERE merchant_id=$1', [merchantId]);
-    return BigInt(result.rows[0].next);
+  // #131: Atomic per-merchant sequence increment — eliminates COUNT-based race condition
+  private async nextInvoiceSequence(merchantId: string): Promise<bigint> {
+    const result = await this.pool.query(
+      `UPDATE merchants SET invoice_seq = invoice_seq + 1 WHERE id=$1 RETURNING invoice_seq`,
+      [merchantId],
+    );
+    return BigInt(result.rows[0].invoice_seq);
   }
 }

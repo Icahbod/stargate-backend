@@ -26,6 +26,11 @@ export class SchedulesService {
   constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
 
   async create(merchantId: string, input: unknown) {
+    /**
+     * Create a recurring schedule for a merchant.
+     * @param merchantId - owning merchant id
+     * @param input - schedule creation payload
+     */
     const dto = createSchema.parse(input);
     const result = await this.pool.query(
       `INSERT INTO recurring_schedules (merchant_id, recipient, amount_usdc, interval, next_run_at)
@@ -36,6 +41,10 @@ export class SchedulesService {
   }
 
   async list(merchantId: string) {
+    /**
+     * List recurring schedules for a merchant.
+     * @param merchantId - owning merchant id
+     */
     const result = await this.pool.query(
       `SELECT * FROM recurring_schedules WHERE merchant_id=$1 ORDER BY created_at DESC`,
       [merchantId],
@@ -44,6 +53,11 @@ export class SchedulesService {
   }
 
   async get(merchantId: string, id: string) {
+    /**
+     * Retrieve a recurring schedule by id for a merchant.
+     * @param merchantId - owning merchant id
+     * @param id - schedule id
+     */
     const result = await this.pool.query(
       `SELECT * FROM recurring_schedules WHERE id=$1 AND merchant_id=$2`,
       [id, merchantId],
@@ -53,6 +67,12 @@ export class SchedulesService {
   }
 
   async update(merchantId: string, id: string, input: unknown) {
+    /**
+     * Update a recurring schedule.
+     * @param merchantId - owning merchant id
+     * @param id - schedule id
+     * @param input - update payload
+     */
     const current = await this.get(merchantId, id);
     const dto = updateSchema.parse(input);
     const interval = dto.interval ?? current.interval;
@@ -73,6 +93,11 @@ export class SchedulesService {
   }
 
   async remove(merchantId: string, id: string) {
+    /**
+     * Cancel a recurring schedule.
+     * @param merchantId - owning merchant id
+     * @param id - schedule id
+     */
     const result = await this.pool.query(
       `UPDATE recurring_schedules SET status='cancelled', updated_at=NOW()
         WHERE id=$1 AND merchant_id=$2 RETURNING *`,

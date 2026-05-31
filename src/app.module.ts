@@ -1,17 +1,11 @@
-import { AdminModule } from './admin/admin.module';
-import { TreasuryModule } from './treasury/treasury.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AuditModule } from './audit/audit.module';
-import { AdminModule } from './admin/admin.module';
-import { AuditModule } from './audit/audit.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
-import { AuditModule } from './audit/audit.module';
 import { ComplianceModule } from './compliance/compliance.module';
 import { validate } from './config/validate';
 import { DatabaseModule } from './database/database.module';
@@ -33,7 +27,9 @@ import { StellarModule } from './stellar/stellar.module';
 import { TeamMembersModule } from './team-members/team-members.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { NotificationPreferencesModule } from './notifications/notification-preferences.module';
 import { DevModule } from './dev/dev.module';
+import { AdminModule } from './admin/admin.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { MetricsMiddleware } from './metrics/metrics.middleware';
 
@@ -63,6 +59,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     PaymentsModule,
     PaymentLinksModule,
     WebhooksModule,
+    NotificationPreferencesModule,
     SettlementModule,
     ApiKeysModule,
     AuditModule,
@@ -83,8 +80,7 @@ export class AppModule implements NestModule {
       .apply(MetricsMiddleware)
       .exclude({ path: '/metrics', method: undefined as any })
       .forRoutes('*');
-  }
-}
+
 
     consumer.apply(CorrelationMiddleware).forRoutes('*');
   }
