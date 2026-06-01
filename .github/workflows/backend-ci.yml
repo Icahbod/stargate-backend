@@ -109,9 +109,7 @@ jobs:
         run: pip install schemathesis
       - name: Start API server
         run: |
-          npm run build
-          node dist/main.js &
-          sleep 5
+          npx ts-node -r tsconfig-paths/register src/main.ts &
           for i in $(seq 1 30); do
             if curl -s http://localhost:3001/health >/dev/null 2>&1; then
               echo "Server ready"
