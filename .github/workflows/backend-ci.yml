@@ -66,6 +66,62 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  contract-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: stargate_test
+          POSTGRES_USER: stargate
+          POSTGRES_PASSWORD: test
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 5
+      redis:
+        image: redis:7
+        options: --health-cmd "redis-cli ping" --health-interval 5s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://stargate:test@localhost:5432/stargate_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: minimum-32-chars-high-entropy-secret
+          STELLAR_ASSET_ISSUER: G...
+          PLATFORM_TREASURY_PUBLIC_KEY: G...
+          HORIZON_URL: https://horizon-testnet.stellar.org
+      - run: npm run generate:openapi
+        env:
+          DATABASE_URL: postgresql://stargate:test@localhost:5432/stargate_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: minimum-32-chars-high-entropy-secret
+          STELLAR_ASSET_ISSUER: G...
+          PLATFORM_TREASURY_PUBLIC_KEY: G...
+          HORIZON_URL: https://horizon-testnet.stellar.org
+      - name: Install Schemathesis
+        run: pip install schemathesis
+      - name: Start API server
+        run: |
+          npm run build
+          node dist/main.js &
+          sleep 5
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:3001/health >/dev/null 2>&1; then
+              echo "Server ready"
+              break
+            fi
+            sleep 1
+          done
+      - name: Run contract tests
+        run: SKIP_SERVER=1 bash test/schemathesis.sh
+
   reconciler:
     runs-on: ubuntu-latest
     steps:

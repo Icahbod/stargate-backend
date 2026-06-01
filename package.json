@@ -19,6 +19,8 @@
     "lint": "eslint \"{src,test,scripts}/**/*.ts\" --max-warnings 0",
     "format:check": "prettier --check \"{src,test,scripts}/**/*.ts\"",
     "generate:openapi": "ts-node -r tsconfig-paths/register scripts/generate-openapi.ts",
+    "test:contract": "bash test/schemathesis.sh",
+    "test:contract:full": "bash test/schemathesis.sh --full",
     "publish:types": "npm --prefix packages/types run build && npm publish --workspace packages/types --access public",
     "prepare": "husky"
   },
