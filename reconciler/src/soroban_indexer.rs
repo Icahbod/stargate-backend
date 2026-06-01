@@ -47,13 +47,23 @@ pub async fn index_contract_events(
         }
     });
 
-    let resp: RpcResponse = client
+    // Fetch raw JSON value so we can detect JSON-RPC errors and log their codes.
+    let resp_value: serde_json::Value = client
         .post(soroban_rpc_url)
         .json(&body)
         .send()
         .await?
         .json()
         .await?;
+
+    if let Some(err) = resp_value.get("error") {
+        let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
+        let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("(no message)");
+        tracing::error!("soroban RPC error code {}: {}", code, message);
+        return Err(anyhow::anyhow!("soroban RPC error {}: {}", code, message));
+    }
+
+    let resp: RpcResponse = serde_json::from_value(resp_value)?;
 
     let result = match resp.result {
         Some(r) => r,

@@ -36,8 +36,15 @@ jobs:
           STELLAR_ASSET_ISSUER: G...
           PLATFORM_TREASURY_PUBLIC_KEY: G...
           HORIZON_URL: https://horizon-testnet.stellar.org
-      - run: npm test
+      - run: npm test -- --coverage --coverageProvider=v8
       - run: npm run test:e2e
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+      - name: Enforce 80% coverage
+        run: |
+          node -e "const s=require('./coverage/coverage-summary.json'); if(!s||!s.total||s.total.lines.pct<80){console.error('Coverage below 80%'); process.exit(1);} console.log('Coverage OK');"
       - run: npm run generate:openapi
       - run: npm run publish:types
         if: github.ref == 'refs/heads/main'
