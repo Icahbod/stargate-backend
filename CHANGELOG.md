@@ -10,6 +10,9 @@ See [docs/VERSIONING.md](docs/VERSIONING.md) for the full versioning and release
 
 ## [Unreleased]
 
+### Added
+- `PATCH /treasury/signing-quorum` — allow governance admins to update the treasury signing quorum via authenticated API.
+
 ---
 
 ## [1.2.0] - 2026-05-28
