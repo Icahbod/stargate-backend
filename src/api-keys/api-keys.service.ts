@@ -89,11 +89,6 @@ export class ApiKeysService {
     return result.rows[0] ?? null;
   }
 
-  async validate(rawKey: string): Promise<{ merchantId: string; scope: ApiKeyScope }> {
-    /**
-     * Validate a raw API key and return its merchant and scope.
-     * @param rawKey - raw API key string provided by a client
-     */
   async validate(rawKey: string, clientIp?: string): Promise<{ merchantId: string; scope: ApiKeyScope }> {
     const hash = createHash('sha256').update(rawKey).digest('hex');
     const result = await this.pool.query(
