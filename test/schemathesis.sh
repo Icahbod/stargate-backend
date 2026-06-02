@@ -69,12 +69,10 @@ echo "Hypotheses per endpoint: $HYPOTHESES"
 echo "Checks: $CHECKS"
 echo ""
 
-st run \
-  --base-url "$BASE_URL" \
+schemathesis run \
+  --url "$BASE_URL" \
   --checks "$CHECKS" \
-  --hypothesis-max-examples "$HYPOTHESES" \
-  --validate-schema=true \
-  --show-errors-tracebacks \
+  --max-examples "$HYPOTHESES" \
   --request-timeout 5000 \
   "$OPENAPI_SPEC" 2>&1
 
